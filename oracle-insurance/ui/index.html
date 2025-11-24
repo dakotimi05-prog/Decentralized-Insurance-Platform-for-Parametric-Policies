@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Oracle-based Parametric Insurance Demo</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+        background: #0b1020;
+        color: #f0f4ff;
+      }
+      h1,
+      h2 {
+        color: #7dd3fc;
+      }
+      section {
+        border: 1px solid #1f2937;
+        padding: 1rem 1.5rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1.5rem;
+        background: #020617;
+      }
+      label {
+        display: block;
+        margin-top: 0.5rem;
+      }
+      input {
+        margin-top: 0.25rem;
+        padding: 0.35rem 0.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid #374151;
+        background: #020617;
+        color: #e5e7eb;
+      }
+      button {
+        margin-top: 0.75rem;
+        padding: 0.4rem 0.9rem;
+        border-radius: 0.25rem;
+        border: none;
+        background: #38bdf8;
+        color: #020617;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #log {
+        margin-top: 1rem;
+        max-height: 260px;
+        overflow-y: auto;
+        font-size: 0.9rem;
+        background: #020617;
+        border-radius: 0.5rem;
+        border: 1px solid #1f2937;
+        padding: 0.75rem 1rem;
+        white-space: pre-wrap;
+      }
+      .hint {
+        font-size: 0.8rem;
+        color: #9ca3af;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Decentralized Parametric Insurance (Clarinet Demo)</h1>
+    <p>
+      This UI is a thin layer around the Clarinet simnet. It shows the core flows:
+      depositing liquidity, buying a flight-delay policy, updating the oracle and
+      triggering an automated payout.
+    </p>
+
+    <section>
+      <h2>1. Liquidity Pool</h2>
+      <p class="hint">
+        Conceptually, liquidity providers stake STX into a shared pool. In this
+        demo, we track their balances on-chain but do not broadcast real network
+        transactions from the browser.
+      </p>
+      <label>
+        Provider principal
+        <input id="lp-principal" placeholder="ST... (simnet principal)" />
+      </label>
+      <label>
+        Amount to deposit (uSTX, e.g. 10000000)
+        <input id="lp-amount" type="number" value="10000000" />
+      </label>
+      <button id="btn-deposit">Deposit liquidity (simulated)</button>
+      <button id="btn-withdraw">Withdraw 50% (simulated)</button>
+    </section>
+
+    <section>
+      <h2>2. Buy Flight-delay Policy</h2>
+      <label>
+        Holder principal
+        <input id="user-principal" placeholder="ST... (simnet principal)" />
+      </label>
+      <label>
+        Flight ID
+        <input id="flight-id" value="UA123" />
+      </label>
+      <label>
+        Delay threshold (minutes)
+        <input id="threshold" type="number" value="120" />
+      </label>
+      <label>
+        Premium (accounting only)
+        <input id="premium" type="number" value="1000000" />
+      </label>
+      <label>
+        Payout amount (uSTX)
+        <input id="payout" type="number" value="10000000" />
+      </label>
+      <button id="btn-buy">Buy policy (simulated)</button>
+    </section>
+
+    <section>
+      <h2>3. Oracle update &amp; automated payout</h2>
+      <p class="hint">
+        In a real deployment, an off-chain oracle service would write flight
+        data into the <code>oracles</code> contract. Here you can spoof a delay
+        manually and then ask the insurance contract to evaluate the
+        condition.
+      </p>
+      <label>
+        Flight delay reported by oracle (minutes)
+        <input id="oracle-delay" type="number" value="150" />
+      </label>
+      <label>
+        Policy ID to check
+        <input id="policy-id" type="number" value="1" />
+      </label>
+      <button id="btn-oracle">Update oracle (simulated)</button>
+      <button id="btn-check">Check policy &amp; payout (simulated)</button>
+    </section>
+
+    <section>
+      <h2>Event log</h2>
+      <div id="log"></div>
+      <p class="hint">
+        This UI does not talk directly to a node. Instead, it builds up the
+        intended calls to the Clarinet simnet and shows the parameters. You can
+        copy the printed calls and replay them in the Clarinet console or test
+        environment.
+      </p>
+    </section>
+
+    <script type="module">
+      const logEl = document.getElementById("log");
+
+      function log(message) {
+        const time = new Date().toISOString().split("T")[1].replace("Z", "");
+        logEl.textContent += `[${time}] ${message}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function getVal(id) {
+        return (document.getElementById(id)?.value || "").trim();
+      }
+
+      // These helpers only build the Clarinet test-style calls. You can paste
+      // them into a Vitest test file or the Clarinet console.
+      function buildContractCall(contract, fn, args, sender) {
+        return `Tx.contractCall("${contract}", "${fn}", [${args.join(", ")}], "${
+          sender || "<principal>"
+        }")`;
+      }
+
+      document.getElementById("btn-deposit").onclick = () => {
+        const provider = getVal("lp-principal") || "<lp-principal>";
+        const amount = getVal("lp-amount") || "10000000";
+        log(
+          "Deposit liquidity (simnet):\n" +
+            buildContractCall(
+              "parametric-insurance",
+              "deposit-liquidity",
+              [`types.uint(${amount})`],
+              provider
+            )
+        );
+      };
+
+      document.getElementById("btn-withdraw").onclick = () => {
+        const provider = getVal("lp-principal") || "<lp-principal>";
+        const amount = getVal("lp-amount") || "10000000";
+        const half = Math.floor(Number(amount) / 2);
+        log(
+          "Withdraw liquidity (simnet):\n" +
+            buildContractCall(
+              "parametric-insurance",
+              "withdraw-liquidity",
+              [`types.uint(${half})`],
+              provider
+            )
+        );
+      };
+
+      document.getElementById("btn-buy").onclick = () => {
+        const user = getVal("user-principal") || "<user-principal>";
+        const flightId = getVal("flight-id");
+        const threshold = getVal("threshold") || "120";
+        const premium = getVal("premium") || "1000000";
+        const payout = getVal("payout") || "10000000";
+
+        log(
+          "Buy flight policy (simnet):\n" +
+            buildContractCall(
+              "parametric-insurance",
+              "buy-flight-policy",
+              [
+                `types.ascii("${flightId || "UA123"}")`,
+                `types.uint(${threshold})`,
+                `types.uint(${premium})`,
+                `types.uint(${payout})`,
+              ],
+              user
+            )
+        );
+      };
+
+      document.getElementById("btn-oracle").onclick = () => {
+        const flightId = getVal("flight-id") || "UA123";
+        const delay = getVal("oracle-delay") || "150";
+        log(
+          "Oracle update (simnet):\n" +
+            buildContractCall(
+              "oracles",
+              "set-flight-delay",
+              [
+                `types.ascii("${flightId}")`,
+                `types.uint(${delay})`,
+                `types.uint(1000) // timestamp placeholder`,
+              ],
+              "<oracle-admin>"
+            )
+        );
+      };
+
+      document.getElementById("btn-check").onclick = () => {
+        const user = getVal("user-principal") || "<user-principal>";
+        const policyId = getVal("policy-id") || "1";
+        log(
+          "Check policy & payout (simnet):\n" +
+            buildContractCall(
+              "parametric-insurance",
+              "check-flight-policy-and-payout",
+              [`types.uint(${policyId})`],
+              user
+            )
+        );
+      };
+
+      log("UI loaded. Use the buttons above to generate Clarinet simnet calls.");
+    </script>
+  </body>
+</html>
